@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Jarvis Translate</title>
+  <meta name="description" content="Live two-way voice and text translator.">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Jarvis Translate</h1>
+    <span id="engine" class="chip" title="Translation engine in use">Online</span>
+  </header>
+
+  <section class="langbar" aria-label="Languages">
+    <label class="sr-only" for="langA">Your language</label>
+    <select id="langA"></select>
+    <button id="swap" type="button" aria-label="Swap languages">&#8646;</button>
+    <label class="sr-only" for="langB">Their language</label>
+    <select id="langB"></select>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-view="talk" aria-selected="true">Conversation</button>
+    <button role="tab" data-view="text" aria-selected="false">Text</button>
+    <button role="tab" data-view="history" aria-selected="false">History</button>
+  </nav>
+
+  <main>
+    <section id="view-talk" class="view">
+      <div id="thread" class="thread" aria-live="polite"></div>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <div class="toggles">
+        <label><input type="checkbox" id="autoSpeak"> Speak translations</label>
+        <label><input type="checkbox" id="handsFree"> Take turns automatically</label>
+      </div>
+      <div class="mics">
+        <button id="micA" class="mic" type="button" data-side="a">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="mic-label"></span>
+        </button>
+        <button id="micB" class="mic alt" type="button" data-side="b">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="mic-label"></span>
+        </button>
+      </div>
+    </section>
+
+    <section id="view-text" class="view" hidden>
+      <div class="card">
+        <textarea id="src" rows="5" maxlength="2000" dir="auto" placeholder="Type or paste text"></textarea>
+        <div class="row">
+          <span id="count" class="muted">0 / 2000</span>
+          <button id="clearSrc" type="button" class="ghost">Clear</button>
+        </div>
+      </div>
+      <div class="card out">
+        <p id="out" class="big" dir="auto" aria-live="polite"></p>
+        <div class="row">
+          <span id="textStatus" class="muted"></span>
+          <span class="actions">
+            <button id="speakOut" type="button" class="ghost">Play</button>
+            <button id="copyOut" type="button" class="ghost">Copy</button>
+            <button id="saveOut" type="button" class="ghost">Save</button>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-history" class="view" hidden>
+      <div class="row">
+        <label><input type="checkbox" id="onlyStar"> Saved only</label>
+        <button id="clearHistory" type="button" class="ghost danger">Clear history</button>
+      </div>
+      <div id="historyList" class="thread"></div>
+    </section>
+  </main>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
