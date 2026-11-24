@@ -1,5 +1,5 @@
 // Caches the app shell so it opens offline. Translation itself still needs a connection.
-const CACHE = 'jarvis-translate-v1';
+const CACHE = 'jarvis-translate-v2';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {

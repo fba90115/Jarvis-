@@ -253,7 +253,11 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const thread = $('thread');
 const notice = $('notice');
 let rec = null;
+let session = null;
 let listeningSide = null;
+let liveTimer = 0;
+const LIVE_PAUSE_MS = 450;
+const MAX_SILENT_RUNS = 2;
 
 function showNotice(text) {
   notice.textContent = text || '';
@@ -265,7 +269,7 @@ function emptyThread() {
   thread.append(el('p', {
     className: 'empty',
     textContent: SR
-      ? 'Tap a language below and start talking. The translation appears here and is read aloud.'
+      ? 'Tap a language below and start talking. The translation appears as you speak. Tap again to stop.'
       : 'This browser can\'t listen through the microphone. Use Chrome, Edge or Safari for voice, or the Text tab here.',
   }));
 }
@@ -290,6 +294,8 @@ function setListening(side) {
 }
 
 function stopListening() {
+  session = null;
+  clearTimeout(liveTimer);
   if (rec) {
     rec.onend = null;
     rec.onresult = null;
@@ -301,22 +307,35 @@ function stopListening() {
   setListening(null);
 }
 
-function listen(side) {
+// A session keeps the mic open sentence after sentence until it's tapped off.
+// Each sentence is its own short recognition run, because phone browsers end
+// recognition at every pause anyway.
+function startSession(side) {
   if (!SR) return;
   stopListening();
   synth?.cancel();
   showNotice('');
+  session = { side, empties: 0 };
+  hearOne();
+}
+
+function hearOne() {
+  const s = session;
+  if (!s) return;
+  const side = s.side;
+  const [from, to] = sideLangs(side);
   thread.querySelector('.empty')?.remove();
 
-  const [from, to] = sideLangs(side);
-  const live = el('div', { className: `bubble ${side} live` },
-    el('p', { className: 'src', dir: 'auto', textContent: '…' }));
+  const srcP = el('p', { className: 'src', dir: 'auto', textContent: '…' });
+  const outP = el('p', { className: 'out', dir: 'auto', lang: to.speech });
+  const live = el('div', { className: `bubble ${side} live` }, srcP, outP);
   thread.append(live);
   scrollThread();
 
   let finalText = '';
   let heard = '';
   let failed = false;
+  let liveSeq = 0;
   const r = new SR();
   rec = r;
   r.lang = from.speech;
@@ -332,38 +351,58 @@ function listen(side) {
       else interim += res[0].transcript;
     }
     heard = (finalText + interim).trim();
-    live.firstChild.textContent = heard || '…';
+    srcP.textContent = heard || '…';
     scrollThread();
+    // Translate while the person is still talking, at each short pause.
+    clearTimeout(liveTimer);
+    if (!heard) return;
+    liveTimer = setTimeout(async () => {
+      const seq = ++liveSeq;
+      try {
+        const out = await translate(heard, from, to);
+        if (seq === liveSeq && live.isConnected) { outP.textContent = out; scrollThread(); }
+      } catch { /* the final pass reports errors */ }
+    }, LIVE_PAUSE_MS);
   };
 
   r.onerror = (e) => {
     failed = true;
-    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      showNotice('Microphone access is blocked. Allow it in your browser\'s site settings, then try again.');
-    } else if (e.error === 'language-not-supported') {
-      showNotice(`This browser can't listen in ${from.name}. Try the Text tab for this language.`);
-    } else if (e.error === 'network') {
-      showNotice('Speech recognition needs an internet connection.');
-    } else if (e.error === 'audio-capture') {
-      showNotice('No microphone was found.');
-    }
+    const fatal = {
+      'not-allowed': 'Microphone access is blocked. Allow it in your browser\'s site settings, then try again.',
+      'service-not-allowed': 'Microphone access is blocked. Allow it in your browser\'s site settings, then try again.',
+      'language-not-supported': `This browser can't listen in ${from.name}. Try the Text tab for this language.`,
+      'network': 'Speech recognition needs an internet connection.',
+      'audio-capture': 'No microphone was found.',
+    }[e.error];
+    if (fatal) { showNotice(fatal); session = null; }
   };
 
-  r.onend = () => {
+  r.onend = async () => {
     if (rec !== r) return;
     rec = null;
-    setListening(null);
+    clearTimeout(liveTimer);
+    liveSeq++;
     live.remove();
     // Some browsers end without marking the last result final.
     const text = (finalText || heard).trim();
-    if (text && !failed) commit(side, text, from, to);
-    else emptyThread();
+    if (text && !failed) {
+      s.empties = 0;
+      const ok = await commit(side, text, from, to);
+      if (!ok && session === s) session = null;
+      else if (session === s && settings.handsFree) s.side = side === 'a' ? 'b' : 'a';
+    } else if (session === s && ++s.empties >= MAX_SILENT_RUNS) {
+      session = null; // nobody is talking, so let the mic go
+    }
+    if (session === s) hearOne();
+    else if (!session) { setListening(null); emptyThread(); }
   };
 
   setListening(side);
   try { r.start(); } catch { stopListening(); }
 }
 
+// Shows the finished sentence, reads it aloud, and resolves once the voice is
+// done so the mic doesn't pick up its own translation.
 async function commit(side, text, from, to) {
   const pending = el('div', { className: `bubble ${side} pending` },
     el('p', { className: 'src', dir: 'auto', textContent: text }),
@@ -378,7 +417,7 @@ async function commit(side, text, from, to) {
     pending.remove();
     emptyThread();
     showNotice(errorText(err));
-    return;
+    return false;
   }
 
   const entry = { id: Date.now(), from: from.id, to: to.id, src: text, out, star: false };
@@ -387,22 +426,18 @@ async function commit(side, text, from, to) {
   scrollThread();
 
   if (settings.autoSpeak) await speak(out, to);
-  // Hand the mic to the other person, unless someone already tapped one.
-  if (settings.handsFree && !listeningSide && !$('view-talk').hidden) {
-    listen(side === 'a' ? 'b' : 'a');
-  }
+  return true;
 }
 
 for (const btn of [$('micA'), $('micB')]) {
   btn.addEventListener('click', () => {
     unlockVoice();
     const side = btn.dataset.side;
-    if (listeningSide === side) {
-      // Stop early but keep what was heard.
-      try { rec.stop(); } catch { stopListening(); }
-    } else {
-      listen(side);
-    }
+    if (listeningSide !== side) return startSession(side);
+    // Tapped off: keep the sentence in progress, but don't reopen the mic.
+    session = null;
+    synth?.cancel();
+    if (rec) { try { rec.stop(); } catch { stopListening(); } } else setListening(null);
   });
 }
 
@@ -451,7 +486,7 @@ async function runText() {
 src.addEventListener('input', () => {
   $('count').textContent = `${src.value.length} / 2000`;
   clearTimeout(textTimer);
-  textTimer = setTimeout(runText, 700);
+  textTimer = setTimeout(runText, 400);
 });
 $('clearSrc').onclick = () => { src.value = ''; src.dispatchEvent(new Event('input')); src.focus(); };
 $('speakOut').onclick = () => speak(outEl.textContent, byId[settings.b]);

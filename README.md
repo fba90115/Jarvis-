@@ -4,7 +4,7 @@ A live two-way translator that runs in the browser. No build step, no API key.
 
 ## What it does
 
-- **Conversation**: two mic buttons, one per language. Tap, speak, and the translation shows up and is read aloud. "Take turns automatically" hands the mic to the other person after each translation.
+- **Conversation**: two mic buttons, one per language. Tap one and talk. The translation appears while you speak, each finished sentence is read aloud, and the mic stays open until you tap it again. "Take turns automatically" hands the mic to the other person after each translation.
 - **Text**: type or paste up to 2,000 characters and get a translation as you type.
 - **History**: every translation is kept on the device. Save the ones you want to keep as a phrasebook.
 - 28 languages, including English, Mandarin, Cantonese, Malay and Tamil.
